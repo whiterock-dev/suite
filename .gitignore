@@ -4,3 +4,5 @@ dist
 .env
 .env.local
 .env.*.local
+# Local copy with secrets for Vercel UI paste (keep out of git)
+vercel.env
