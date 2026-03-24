@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -7,9 +13,12 @@ import {
   type User,
 } from "firebase/auth";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { isEditorEmail } from "./auth";
 import { CardModal } from "./CardModal";
 import { DEFAULT_CARDS } from "./defaultCards";
+import { GoogleIcon } from "./GoogleIcon";
 import { getAuthInstance, getDb, isFirebaseConfigured } from "./firebase";
+import { parseCardColor } from "./colorUtils";
 import type { SuiteCard } from "./types";
 import { hostLabel, hrefForUrl } from "./urls";
 
@@ -23,21 +32,26 @@ function normalizeCards(raw: unknown[]): SuiteCard[] {
       const description = String(o.description ?? "");
       const url = String(o.url ?? "");
       if (!id || !title) return null;
-      return { id, title, description, url };
+      const color = parseCardColor(o.color);
+      const card: SuiteCard = { id, title, description, url };
+      if (color) card.color = color;
+      return card;
     })
     .filter((x): x is SuiteCard => x !== null);
 }
 
 export default function App() {
   const [cards, setCards] = useState<SuiteCard[]>(DEFAULT_CARDS);
+  /** Once Firestore has delivered a snapshot, don’t wipe cards on read errors (e.g. after sign-out if rules wrongly require auth to read). */
+  const firestoreHydratedRef = useRef(false);
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [modalCard, setModalCard] = useState<SuiteCard | "new" | null>(null);
 
   const configured = isFirebaseConfigured();
-  const canEdit = configured && Boolean(user);
+  const canEdit =
+    configured && Boolean(user) && isEditorEmail(user?.email ?? null);
 
   useEffect(() => {
     const auth = getAuthInstance();
@@ -45,23 +59,38 @@ export default function App() {
       setUser(null);
       return;
     }
-    return onAuthStateChanged(auth, setUser);
+    return onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        setUser(null);
+        return;
+      }
+      if (!isEditorEmail(u.email)) {
+        setAuthError(
+          "This Google account is not authorized to edit the suite."
+        );
+        await signOut(auth);
+        setUser(null);
+        return;
+      }
+      setAuthError(null);
+      setUser(u);
+    });
   }, [configured]);
 
   useEffect(() => {
     const db = getDb();
     if (!db) {
       setCards(DEFAULT_CARDS);
-      setLoading(false);
       return;
     }
     const docRef = doc(db, "suite", "cards");
     const unsub = onSnapshot(
       docRef,
       (snap) => {
+        firestoreHydratedRef.current = true;
+        setSaveError(null);
         if (!snap.exists()) {
           setCards(DEFAULT_CARDS);
-          setLoading(false);
           return;
         }
         const raw = snap.data()?.cards;
@@ -71,32 +100,29 @@ export default function App() {
         } else {
           setCards(DEFAULT_CARDS);
         }
-        setLoading(false);
       },
       (err) => {
         console.error(err);
         setSaveError(err.message);
-        setCards(DEFAULT_CARDS);
-        setLoading(false);
+        if (!firestoreHydratedRef.current) {
+          setCards(DEFAULT_CARDS);
+        }
       }
     );
     return () => unsub();
   }, [configured]);
 
-  const persistCards = useCallback(
-    async (next: SuiteCard[]) => {
-      const db = getDb();
-      const auth = getAuthInstance();
-      if (!db || !auth?.currentUser) return;
-      setSaveError(null);
-      await setDoc(
-        doc(db, "suite", "cards"),
-        { cards: next, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-    },
-    []
-  );
+  const persistCards = useCallback(async (next: SuiteCard[]) => {
+    const db = getDb();
+    const auth = getAuthInstance();
+    if (!db || !auth?.currentUser) return;
+    setSaveError(null);
+    await setDoc(
+      doc(db, "suite", "cards"),
+      { cards: next, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  }, []);
 
   const signIn = async () => {
     const auth = getAuthInstance();
@@ -118,19 +144,33 @@ export default function App() {
     await signOut(auth);
   };
 
-  const handleSaveCard = async (card: SuiteCard) => {
+  const handleSaveCard = (card: SuiteCard) => {
+    const previous = cards;
     const exists = cards.some((c) => c.id === card.id);
     const next = exists
       ? cards.map((c) => (c.id === card.id ? card : c))
       : [...cards, card];
-    await persistCards(next);
+    setCards(next);
     setModalCard(null);
+    void persistCards(next)
+      .then(() => setSaveError(null))
+      .catch(() => {
+        setCards(previous);
+        setSaveError("Could not save changes. Try again.");
+      });
   };
 
-  const handleDeleteCard = async (id: string) => {
+  const handleDeleteCard = (id: string) => {
+    const previous = cards;
     const next = cards.filter((c) => c.id !== id);
-    await persistCards(next);
+    setCards(next);
     setModalCard(null);
+    void persistCards(next)
+      .then(() => setSaveError(null))
+      .catch(() => {
+        setCards(previous);
+        setSaveError("Could not remove. Try again.");
+      });
   };
 
   const modalOpen = modalCard !== null;
@@ -140,44 +180,50 @@ export default function App() {
   return (
     <div className="page">
       <header className="header">
-        <div className="header-row">
-          <div className="header-text">
-            <h1 className="title">Whiterock Suite</h1>
-            <p className="subtitle">Internal applications</p>
-          </div>
-          <div className="toolbar">
-            {configured && canEdit ? (
-              <>
+        <div className="header-title-row">
+          <h1 className="title">WhiteRock Suite</h1>
+          {configured ? (
+            <div className="header-auth" aria-label="Account">
+              {canEdit ? (
+                <>
+                  <button
+                    type="button"
+                    className="header-auth-btn header-auth-add"
+                    onClick={() => setModalCard("new")}
+                    title="Add application"
+                  >
+                    +
+                  </button>
+                  <span
+                    className="header-auth-email"
+                    title={user?.email ?? ""}
+                  >
+                    {user?.email}
+                  </span>
+                  <button
+                    type="button"
+                    className="header-auth-btn header-auth-out"
+                    onClick={() => void signOutUser()}
+                    title="Sign out"
+                  >
+                    Out
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setModalCard("new")}
+                  className="auth-google-btn"
+                  onClick={() => void signIn()}
+                  title="Sign in with Google"
+                  aria-label="Sign in with Google"
                 >
-                  Add application
+                  <GoogleIcon />
                 </button>
-                <span className="toolbar-user" title={user?.email ?? ""}>
-                  {user?.email}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => void signOutUser()}
-                >
-                  Sign out
-                </button>
-              </>
-            ) : null}
-            {configured && !user ? (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => void signIn()}
-              >
-                Sign in with Google
-              </button>
-            ) : null}
-          </div>
+              )}
+            </div>
+          ) : null}
         </div>
+        <p className="subtitle">Internal applications</p>
         {!configured ? (
           <p className="banner banner-muted">
             Editing and sign-in require Firebase env variables (
@@ -185,24 +231,17 @@ export default function App() {
             still see the default list.
           </p>
         ) : null}
-        {configured && !user ? (
-          <p className="banner banner-muted">
-            Sign in with Google to edit links, descriptions, or add applications.
-          </p>
-        ) : null}
         {authError ? <p className="banner banner-error">{authError}</p> : null}
         {saveError ? <p className="banner banner-error">{saveError}</p> : null}
       </header>
 
       <main className="main">
-        {loading ? (
-          <p className="loading-msg">Loading…</p>
-        ) : cards.length === 0 ? (
+        {cards.length === 0 ? (
           <p className="empty-msg">
             No applications yet.
             {canEdit
-              ? " Use “Add application” to create one."
-              : " Sign in to add some."}
+              ? " Use the + control to add one."
+              : " Authorized editors can sign in to add some."}
           </p>
         ) : (
           <ul className="grid" role="list">
@@ -220,7 +259,16 @@ export default function App() {
                     </button>
                   ) : null}
                   <a
-                    className="card"
+                    className={
+                      card.color ? "card card--accent" : "card"
+                    }
+                    style={
+                      card.color
+                        ? ({
+                            "--card-accent": card.color,
+                          } as CSSProperties)
+                        : undefined
+                    }
                     href={hrefForUrl(card.url)}
                     rel="noopener noreferrer"
                   >

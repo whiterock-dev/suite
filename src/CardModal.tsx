@@ -1,20 +1,21 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { FALLBACK_COLOR_PICKER, parseCardColor } from "./colorUtils";
 import type { SuiteCard } from "./types";
 
 type Props = {
   open: boolean;
   card: SuiteCard | null;
   onClose: () => void;
-  onSave: (card: SuiteCard) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onSave: (card: SuiteCard) => void;
+  onDelete: (id: string) => void;
 };
 
 export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [url, setUrl] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [useAccent, setUseAccent] = useState(false);
+  const [hex, setHex] = useState(FALLBACK_COLOR_PICKER);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const isEdit = Boolean(card?.id);
@@ -26,16 +27,26 @@ export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
       setTitle(card.title);
       setDescription(card.description);
       setUrl(card.url);
+      const parsed = parseCardColor(card.color);
+      if (parsed) {
+        setUseAccent(true);
+        setHex(parsed);
+      } else {
+        setUseAccent(false);
+        setHex(FALLBACK_COLOR_PICKER);
+      }
     } else {
       setTitle("");
       setDescription("");
       setUrl("");
+      setUseAccent(false);
+      setHex(FALLBACK_COLOR_PICKER);
     }
   }, [open, card]);
 
   if (!open) return null;
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const t = title.trim();
     const u = url.trim();
@@ -47,35 +58,34 @@ export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
       setLocalError("URL is required.");
       return;
     }
-    setSaving(true);
     setLocalError(null);
-    try {
-      const next: SuiteCard = {
-        id: card?.id ?? crypto.randomUUID(),
-        title: t,
-        description: description.trim(),
-        url: u,
-      };
-      await onSave(next);
-    } catch {
-      setLocalError("Save failed. Check your connection and permissions.");
-    } finally {
-      setSaving(false);
+    const next: SuiteCard = {
+      id: card?.id ?? crypto.randomUUID(),
+      title: t,
+      description: description.trim(),
+      url: u,
+    };
+    if (useAccent) {
+      const c = parseCardColor(hex);
+      if (!c) {
+        setLocalError("Enter a valid hex color (e.g. #3b82f6).");
+        return;
+      }
+      next.color = c;
     }
+    onSave(next);
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!card?.id) return;
     if (!window.confirm("Remove this application from the suite?")) return;
-    setDeleting(true);
     setLocalError(null);
-    try {
-      await onDelete(card.id);
-    } catch {
-      setLocalError("Delete failed. Check your connection and permissions.");
-    } finally {
-      setDeleting(false);
-    }
+    onDelete(card.id);
+  }
+
+  function onHexTextChange(value: string) {
+    setHex(value);
+    if (parseCardColor(value)) setUseAccent(true);
   }
 
   return (
@@ -132,34 +142,64 @@ export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
               autoComplete="off"
             />
           </label>
+          <div className="field">
+            <span className="field-label">Box color</span>
+            <div className="field-color-row">
+              <input
+                type="color"
+                className="field-color-picker"
+                disabled={!useAccent}
+                value={parseCardColor(hex) ?? FALLBACK_COLOR_PICKER}
+                onChange={(e) => {
+                  setUseAccent(true);
+                  setHex(e.target.value);
+                }}
+                aria-label="Pick accent color"
+              />
+              <input
+                className="field-input field-color-hex"
+                type="text"
+                placeholder="#3b82f6"
+                disabled={!useAccent}
+                value={hex}
+                onChange={(e) => onHexTextChange(e.target.value)}
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <label className="field-color-default">
+                <input
+                  type="checkbox"
+                  checked={!useAccent}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setUseAccent(false);
+                    } else {
+                      setUseAccent(true);
+                    }
+                  }}
+                />
+                Default (no color)
+              </label>
+            </div>
+          </div>
           <div className="modal-actions">
             {isEdit ? (
               <button
                 type="button"
                 className="btn btn-danger"
                 onClick={handleDelete}
-                disabled={saving || deleting}
               >
-                {deleting ? "Removing…" : "Remove"}
+                Remove
               </button>
             ) : (
               <span />
             )}
             <div className="modal-actions-right">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={onClose}
-                disabled={saving || deleting}
-              >
+              <button type="button" className="btn btn-ghost" onClick={onClose}>
                 Cancel
               </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={saving || deleting}
-              >
-                {saving ? "Saving…" : "Save"}
+              <button type="submit" className="btn btn-primary">
+                Save
               </button>
             </div>
           </div>
