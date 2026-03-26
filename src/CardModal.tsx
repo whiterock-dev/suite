@@ -110,7 +110,8 @@ export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
         <form className="modal-form" onSubmit={handleSubmit}>
           {localError ? <p className="modal-error">{localError}</p> : null}
           <label className="field">
-            <span className="field-label">Title</span>
+            <span className="field-label">Name</span>
+            <span className="field-hint">Shown on the tile</span>
             <input
               className="field-input"
               value={title}
@@ -119,7 +120,8 @@ export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
             />
           </label>
           <label className="field">
-            <span className="field-label">URL</span>
+            <span className="field-label">Link URL</span>
+            <span className="field-hint">Opens when someone clicks the tile</span>
             <input
               className="field-input"
               type="text"

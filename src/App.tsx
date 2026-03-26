@@ -173,6 +173,50 @@ export default function App() {
       });
   };
 
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const persistOrder = useCallback(
+    (next: SuiteCard[]) => {
+      const previous = cards;
+      setCards(next);
+      void persistCards(next)
+        .then(() => setSaveError(null))
+        .catch(() => {
+          setCards(previous);
+          setSaveError("Could not save order. Try again.");
+        });
+    },
+    [cards, persistCards]
+  );
+
+  const moveCard = useCallback(
+    (id: string, delta: -1 | 1) => {
+      const i = cards.findIndex((c) => c.id === id);
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= cards.length) return;
+      const next = [...cards];
+      const [removed] = next.splice(i, 1);
+      next.splice(j, 0, removed);
+      persistOrder(next);
+    },
+    [cards, persistOrder]
+  );
+
+  const handleDropOnCard = useCallback(
+    (sourceId: string, targetId: string) => {
+      if (sourceId === targetId) return;
+      const from = cards.findIndex((c) => c.id === sourceId);
+      const to = cards.findIndex((c) => c.id === targetId);
+      if (from < 0 || to < 0) return;
+      const next = [...cards];
+      const [removed] = next.splice(from, 1);
+      next.splice(to, 0, removed);
+      persistOrder(next);
+    },
+    [cards, persistOrder]
+  );
+
   const modalOpen = modalCard !== null;
   const modalEditing =
     modalCard === "new" ? null : modalCard === null ? null : modalCard;
@@ -233,6 +277,12 @@ export default function App() {
         ) : null}
         {authError ? <p className="banner banner-error">{authError}</p> : null}
         {saveError ? <p className="banner banner-error">{saveError}</p> : null}
+        {canEdit ? (
+          <p className="banner banner-muted banner-hint">
+            Drag the handle (⋮⋮) or use ↑↓ on each tile to reorder. Edit sets
+            name and link.
+          </p>
+        ) : null}
       </header>
 
       <main className="main">
@@ -245,9 +295,96 @@ export default function App() {
           </p>
         ) : (
           <ul className="grid" role="list">
-            {cards.map((card) => (
-              <li key={card.id} className="grid-item">
-                <div className="card-shell">
+            {cards.map((card, index) => (
+              <li
+                key={card.id}
+                className={[
+                  "grid-item",
+                  draggingId === card.id ? "grid-item--dragging" : "",
+                  dragOverId === card.id &&
+                  draggingId &&
+                  draggingId !== card.id
+                    ? "grid-item--drop-target"
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onDragOver={
+                  canEdit && draggingId
+                    ? (e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        setDragOverId(card.id);
+                      }
+                    : undefined
+                }
+                onDragLeave={
+                  canEdit
+                    ? (e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          setDragOverId(null);
+                        }
+                      }
+                    : undefined
+                }
+                onDrop={
+                  canEdit
+                    ? (e) => {
+                        e.preventDefault();
+                        const sourceId = e.dataTransfer.getData("text/plain");
+                        setDragOverId(null);
+                        setDraggingId(null);
+                        if (sourceId) handleDropOnCard(sourceId, card.id);
+                      }
+                    : undefined
+                }
+              >
+                <div
+                  className={
+                    canEdit ? "card-shell card-shell--editable" : "card-shell"
+                  }
+                >
+                  {canEdit ? (
+                    <div className="card-toolbar">
+                      <button
+                        type="button"
+                        className="card-drag"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", card.id);
+                          e.dataTransfer.effectAllowed = "move";
+                          setDraggingId(card.id);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingId(null);
+                          setDragOverId(null);
+                        }}
+                        aria-label={`Drag to reorder ${card.title}`}
+                      >
+                        ⋮⋮
+                      </button>
+                      <div className="card-move" role="group" aria-label="Reorder">
+                        <button
+                          type="button"
+                          className="card-move-btn"
+                          disabled={index === 0}
+                          onClick={() => moveCard(card.id, -1)}
+                          aria-label={`Move ${card.title} up`}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="card-move-btn"
+                          disabled={index === cards.length - 1}
+                          onClick={() => moveCard(card.id, 1)}
+                          aria-label={`Move ${card.title} down`}
+                        >
+                          ↓
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   {canEdit ? (
                     <button
                       type="button"

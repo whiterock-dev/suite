@@ -94,6 +94,17 @@ body {
 .grid-item {
   display: flex;
   min-height: 0;
+  border-radius: var(--radius);
+  transition: outline 0.12s ease, opacity 0.12s ease;
+}
+
+.grid-item--drop-target {
+  outline: 2px dashed var(--text-muted);
+  outline-offset: 2px;
+}
+
+.grid-item--dragging {
+  opacity: 0.65;
 }
 
 .card {
@@ -276,6 +287,10 @@ body {
   color: #b42318;
 }
 
+.banner-hint {
+  margin-top: 0.5rem;
+}
+
 .inline-code {
   font-family: ui-monospace, monospace;
   font-size: 0.8em;
@@ -341,13 +356,81 @@ body {
   cursor: not-allowed;
 }
 
-/* Card shell + edit */
+/* Card shell + edit + reorder */
 .card-shell {
   position: relative;
   flex: 1;
   width: 100%;
   display: flex;
   min-height: 0;
+}
+
+.card-shell--editable {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.card-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.25rem 0 0.25rem 0.1rem;
+}
+
+.card-drag {
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  padding: 0.35rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: grab;
+  user-select: none;
+}
+
+.card-drag:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.card-drag:active {
+  cursor: grabbing;
+}
+
+.card-move {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.card-move-btn {
+  font: inherit;
+  font-size: 0.65rem;
+  font-weight: 600;
+  width: 1.65rem;
+  height: 1.35rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.card-move-btn:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  color: var(--text);
 }
 
 .card-shell .card {
@@ -464,6 +547,13 @@ body {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--text-muted);
+}
+
+.field-hint {
+  font-size: 0.6875rem;
+  color: var(--text-faint);
+  margin: -0.15rem 0 0.2rem;
+  line-height: 1.35;
 }
 
 .field-input {
