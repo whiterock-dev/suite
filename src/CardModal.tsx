@@ -12,7 +12,6 @@ type Props = {
 
 export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
   const [url, setUrl] = useState("");
   const [useAccent, setUseAccent] = useState(false);
   const [hex, setHex] = useState(FALLBACK_COLOR_PICKER);
@@ -25,7 +24,6 @@ export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
     setLocalError(null);
     if (card) {
       setTitle(card.title);
-      setDescription(card.description);
       setUrl(card.url);
       const parsed = parseCardColor(card.color);
       if (parsed) {
@@ -37,7 +35,6 @@ export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
       }
     } else {
       setTitle("");
-      setDescription("");
       setUrl("");
       setUseAccent(false);
       setHex(FALLBACK_COLOR_PICKER);
@@ -62,7 +59,7 @@ export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
     const next: SuiteCard = {
       id: card?.id ?? crypto.randomUUID(),
       title: t,
-      description: description.trim(),
+      description: "",
       url: u,
     };
     if (useAccent) {
@@ -119,15 +116,6 @@ export function CardModal({ open, card, onClose, onSave, onDelete }: Props) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               autoComplete="off"
-            />
-          </label>
-          <label className="field">
-            <span className="field-label">Description</span>
-            <textarea
-              className="field-input field-textarea"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
             />
           </label>
           <label className="field">

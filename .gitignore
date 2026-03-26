@@ -6,3 +6,5 @@ dist
 .env.*.local
 # Local copy with secrets for Vercel UI paste (keep out of git)
 vercel.env
+serviceAccount.json
+*-firebase-adminsdk-*.json

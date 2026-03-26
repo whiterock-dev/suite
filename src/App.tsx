@@ -20,7 +20,7 @@ import { GoogleIcon } from "./GoogleIcon";
 import { getAuthInstance, getDb, isFirebaseConfigured } from "./firebase";
 import { parseCardColor } from "./colorUtils";
 import type { SuiteCard } from "./types";
-import { hostLabel, hrefForUrl } from "./urls";
+import { hrefForUrl } from "./urls";
 
 function normalizeCards(raw: unknown[]): SuiteCard[] {
   return raw
@@ -273,8 +273,6 @@ export default function App() {
                     rel="noopener noreferrer"
                   >
                     <span className="card-name">{card.title}</span>
-                    <span className="card-desc">{card.description}</span>
-                    <span className="card-host">{hostLabel(card.url)}</span>
                   </a>
                 </div>
               </li>
